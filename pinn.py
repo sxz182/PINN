@@ -1,6 +1,10 @@
 import numpy as np
 
 
+def _zero_forcing(x):
+    return np.zeros_like(x)
+
+
 class PINN1D:
     def __init__(self, hidden_size=20, lambda_coeff=1.0, physics_weight=1.0, seed=42):
         rng = np.random.default_rng(seed)
@@ -33,9 +37,9 @@ class PINN1D:
     def _physics_residual(self, x_phys, forcing_fn):
         z1, a1, y = self._forward(x_phys)
         da1_dz1 = 1.0 - a1**2
-        du_dx = np.sum(da1_dz1 * self.W1 * self.W2.T, axis=1, keepdims=True)
+        dy_dx = np.sum(da1_dz1 * self.W1 * self.W2.T, axis=1, keepdims=True)
         forcing = forcing_fn(x_phys)
-        residual = du_dx + self.lambda_coeff * y - forcing
+        residual = dy_dx + self.lambda_coeff * y - forcing
         return residual, z1, a1, y, da1_dz1
 
     def train(
@@ -53,7 +57,7 @@ class PINN1D:
         x_phys = self._as_column(x_phys)
 
         if forcing_fn is None:
-            forcing_fn = lambda x: np.zeros_like(x)
+            forcing_fn = _zero_forcing
 
         history = []
         for epoch in range(epochs):
@@ -73,16 +77,18 @@ class PINN1D:
             phys_loss = np.mean(residual**2)
 
             r_factor = (2.0 / len(x_phys)) * residual
-            common = self.W2.T * da1_dz1_p
-            a1_term = -2.0 * a1_p * da1_dz1_p
+            weighted_activation_grad = self.W2.T * da1_dz1_p
+            activation_second_deriv_factor = -2.0 * a1_p * da1_dz1_p
 
             dr_dW2 = da1_dz1_p * self.W1 + self.lambda_coeff * a1_p
             dr_db2 = np.full_like(residual, self.lambda_coeff)
-            dr_db1 = self.W2.T * (a1_term * self.W1 + self.lambda_coeff * da1_dz1_p)
+            dr_db1 = self.W2.T * (
+                activation_second_deriv_factor * self.W1 + self.lambda_coeff * da1_dz1_p
+            )
             dr_dW1 = (
                 self.W2.T * da1_dz1_p
-                + self.W2.T * self.W1 * a1_term * x_phys
-                + self.lambda_coeff * common * x_phys
+                + self.W2.T * self.W1 * activation_second_deriv_factor * x_phys
+                + self.lambda_coeff * weighted_activation_grad * x_phys
             )
 
             dW2_phys = np.sum(r_factor * dr_dW2, axis=0, keepdims=True).T

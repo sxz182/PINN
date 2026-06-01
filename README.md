@@ -13,7 +13,7 @@
 ## 快速开始
 
 ```bash
-cd /tmp/workspace/sxz182/PINN
+cd PINN
 python pinn.py
 ```
 
@@ -22,6 +22,6 @@ python pinn.py
 ## 运行测试
 
 ```bash
-cd /tmp/workspace/sxz182/PINN
+cd PINN
 python -m unittest discover -s tests -q
 ```
